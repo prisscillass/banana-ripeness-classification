@@ -5,6 +5,26 @@ import cv2
 import pickle
 import time
 
+# st.markdown(
+#     """
+#     <style>
+#         body {
+#             background-color: #FFF8D6 !important;
+#         }
+#         .stApp {
+#             background-color: #FFF8D6;
+#         }
+#         .result-card {
+#             background-color: #FFE28A;
+#             padding: 20px;
+#             border-radius: 15px;
+#             margin-top: 15px;
+#         }
+#     </style>
+#     """,
+#     unsafe_allow_html=True
+# )
+
 # ================================
 # Load Model & Scaler
 # ================================
