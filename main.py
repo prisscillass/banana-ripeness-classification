@@ -4,78 +4,33 @@ import numpy as np
 import cv2
 import pickle
 import time
-
-# st.markdown(
-#     """
-#     <style>
-#         body {
-#             background-color: #FFF8D6 !important;
-#         }
-#         .stApp {
-#             background-color: #FFF8D6;
-#         }
-#         .result-card {
-#             background-color: #FFE28A;
-#             padding: 20px;
-#             border-radius: 15px;
-#             margin-top: 15px;
-#         }
-#     </style>
-#     """,
-#     unsafe_allow_html=True
-# )
+from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input as mobile_preprocess
+from tensorflow.keras.models import Model
 
 # ================================
 # Load Model & Scaler
 # ================================
-with open("model/svm_model_best.pkl", "rb") as f:
+with open("model/banana_ripeness_mobilenet_svm (1).pkl", "rb") as f:
     data = pickle.load(f)
 
 model = data["model"]
 scaler = data["scaler"]
 
 CLASSES = ["pisang_mentah", "pisang_setengah_matang", "pisang_matang", "pisang_sangat_matang"]
-IMG_SIZE = (100, 100)
 
 # ================================
-# Preprocess & Feature Extraction
+# Load MobileNet Feature Extractor
 # ================================
-def preprocess_image(img):
-    img_resized = cv2.resize(img, IMG_SIZE)
-    hsv = cv2.cvtColor(img_resized, cv2.COLOR_BGR2HSV)
-    lower = np.array([0,0,0])
-    upper = np.array([179,255,200])
-    mask = cv2.inRange(hsv, lower, upper)
-    img_masked = cv2.bitwise_and(img_resized, img_resized, mask=mask)
-    return img_masked, mask, hsv
+base_model = MobileNetV2(weights="imagenet", include_top=False, pooling="avg")
 
-from skimage.feature import local_binary_pattern
-
-def extract_features(img_masked, hsv_img, mask):
-    mean_h = cv2.mean(hsv_img[:,:,0], mask=mask)[0]
-    mean_s = cv2.mean(hsv_img[:,:,1], mask=mask)[0]
-    mean_v = cv2.mean(hsv_img[:,:,2], mask=mask)[0]
-    std_h = np.std(hsv_img[:,:,0][mask>0])
-    std_s = np.std(hsv_img[:,:,1][mask>0])
-    std_v = np.std(hsv_img[:,:,2][mask>0])
-
-    hist_h = cv2.calcHist([hsv_img],[0],mask,[8],[0,180]).flatten()
-    hist_s = cv2.calcHist([hsv_img],[1],mask,[8],[0,256]).flatten()
-    hist_v = cv2.calcHist([hsv_img],[2],mask,[8],[0,256]).flatten()
-
-    gray = cv2.cvtColor(img_masked, cv2.COLOR_BGR2GRAY)
-    lbp = local_binary_pattern(gray, P=8, R=1, method="uniform")
-    (hist_lbp, _) = np.histogram(lbp.ravel(), bins=np.arange(0,10), range=(0,9))
-    hist_lbp = hist_lbp.astype("float")
-    hist_lbp /= (hist_lbp.sum() + 1e-6)
-
-    area = cv2.countNonZero(mask)
-    contours,_ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    perimeter = cv2.arcLength(contours[0], True) if len(contours)>0 else 1
-    ratio_area_perimeter = area / (perimeter + 1e-6)
-
-    features = [mean_h, mean_s, mean_v, std_h, std_s, std_v, area, ratio_area_perimeter]
-    features = np.concatenate([features, hist_h, hist_s, hist_v, hist_lbp])
+# ================================
+# Feature Extraction
+# ================================
+def extract_features(img):
+    img_resized = cv2.resize(img, (224, 224))  
+    img_preprocessed = mobile_preprocess(img_resized.astype("float32"))
+    img_expanded = np.expand_dims(img_preprocessed, axis=0)
+    features = base_model.predict(img_expanded)[0]  # output 1280 features
     return features
 
 # ================================
@@ -104,8 +59,7 @@ if uploaded_file:
             time.sleep(1.5)
 
             img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-            img_masked, mask, hsv_img = preprocess_image(img_cv)
-            features = extract_features(img_masked, hsv_img, mask)
+            features = extract_features(img_cv)
             features_scaled = scaler.transform([features])
 
             pred = model.predict(features_scaled)[0]
